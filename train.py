@@ -70,15 +70,20 @@ def set_model(arch = 'densenet161', output = 102, hidden_units_1 = 512, hidden_u
     trainloader, validloader, testloader, class_to_idx = transform_image(args.data_dir)
     if arch == 'densenet161':
         model = models.densenet161(pretrained=True)
+        in_features = model.classifier.in_features
     elif arch == 'vgg19':
         model = models.vgg19(pretrained=True)
+        in_features = model.classifier[0].in_features
+    elif arch == 'resnet':
+        model = models.resnet18(pretrained=True)
+        in_features = model.fc.in_features
     else:
         print('Unexpected architecture')
     for param in model.parameters():
         param.requires_grad = False
 
     classifier = nn.Sequential(OrderedDict([
-                            ('fc1', nn.Linear(2208, hidden_units_1)),
+                            ('fc1', nn.Linear(in_features, hidden_units_1)),
                             ('relu1', nn.ReLU()),
                             ('dropout1', nn.Dropout(0.3)),
                             ('fc2', nn.Linear(hidden_units_1, hidden_units_2)),
@@ -92,12 +97,12 @@ def set_model(arch = 'densenet161', output = 102, hidden_units_1 = 512, hidden_u
     # Only train the classifier parameters, feature parameters are frozen
     optimizer = optim.Adam(model.classifier.parameters(), lr=learning_rate)
     model.class_to_idx = class_to_idx
-    return model, optimizer, criterion
+    return model, optimizer, criterion, learning_rate
 
 
 def train_model(epochs):
     trainloader, validloader, testloader, class_to_idx = transform_image(args.data_dir)
-    model, optimizer, criterion = set_model(args.arch, args.output, args.hidden_units_1, args.hidden_units_2, args.learning_rate)
+    model, optimizer, criterion, learning_rate = set_model(args.arch, args.output, args.hidden_units_1, args.hidden_units_2, args.learning_rate)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     steps = 0
@@ -141,11 +146,12 @@ def train_model(epochs):
                       f"Validation accuracy: {accuracy/len(validloader):.3f}")
                 running_loss = 0
                 model.train()
-    return model, optimizer, epochs
+    return model, optimizer, epochs, learning_rate
 
 def save_model(name = 'checkpoint.pth'):
-    model, optimizer, epochs = train_model(args.epochs)
+    model, optimizer, epochs, learning_rate = train_model(args.epochs)
     checkpoint = {'epochs': epochs,
+                  'learning_rate': learning_rate,
                   'classifier': model.classifier,
                   'class_to_idx': model.class_to_idx,
                   'state_dict': model.state_dict(),
@@ -158,6 +164,7 @@ def load_model(path):
     checkpoint = torch.load(path)
     model = models.densenet161(pretrained=True)
     model.classifier = checkpoint['classifier']
+    learning_rate = checkpoint['learning_rate']
     epochs = checkpoint['epochs']
     optimizer = checkpoint['optimizer']
     model.load_state_dict(checkpoint['state_dict'])
