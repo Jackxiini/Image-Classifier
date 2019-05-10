@@ -74,7 +74,7 @@ def set_model(arch = 'densenet161', output = 102, hidden_units_1 = 512, hidden_u
     elif arch == 'vgg19':
         model = models.vgg19(pretrained=True)
         in_features = model.classifier[0].in_features
-    elif arch == 'resnet':
+    elif arch == 'resnet18':
         model = models.resnet18(pretrained=True)
         in_features = model.fc.in_features
     else:
